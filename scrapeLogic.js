@@ -14,33 +14,56 @@ const scrapeLogic = async (res) => {
         process.env.NODE_ENV === 'production'
             ? process.env.PUPPETEER_EXECUTABLE_PATH
             : puppeteer.executablePath(),
+    headless: true,
+    defaultViewport: null,
   });
 
   try {
     const page = await browser.newPage();
 
+    // for headless mode
+    const ua =    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.181 Safari/537.36";  
+    await page.setUserAgent(ua);
+
     // Navigate the page to a URL
-    await page.goto('https://developer.chrome.com/');
+    await page.goto('https://playalberta.ca/lottery', {
+      waitUntil: "networkidle0",
+    });
 
-    // Set screen size
-    await page.setViewport({width: 1080, height: 1024});
+    await page.waitForSelector('.rd-dbg-card-content');
 
-    // Type into search box
-    await page.type('.devsite-search-field', 'automate beyond recorder');
+    const lottery = await page.evaluate(() => {
+      // Fetch the first element with class 'quote'
+      const lottos = document.querySelectorAll(".rd-dbg-card-content");
+      if(lottos == null) {
+        console.log(".rd-dbg-card-content FAIL!!!");
+        return 0;
+      }
+      // convert the lotto list into an iterable array
+      return Array.from(lottos).map((lotto) => {
+        // rd-dbg-img-wrapper
+        var alt = lotto.getElementsByTagName('img')[0].alt; // assuming a single image tag
 
-    // Wait and click on first result
-    const searchResultSelector = '.devsite-result-item-link';
-    await page.waitForSelector(searchResultSelector);
-    await page.click(searchResultSelector);
+        var prize = lotto.querySelector(".rd-dbg-prize");
+        if(prize != null)
+          prize = lotto.querySelector(".rd-dbg-prize").textContent;
+        else {
+          console.log(".rd-dbg-prize FAIL!");
+          prize = "oops - prize not there";
+        }
 
-    // Locate the full title with a unique string
-    const textSelector = await page.waitForSelector(
-        'text/Customize and automate'
-    );
-    const fullTitle = await textSelector?.evaluate(el => el.textContent);
+        var extra = lotto.querySelector(".rd-dbg-extended-jackpot-info");
+        if(extra != null)
+          extra = lotto.querySelector(".rd-dbg-extended-jackpot-info").textContent;
+        else {
+          console.log(".rd-dbg-extended-jackpot-info FAIL!");
+          prize = "oops - extra not there";
+        }
+        return { alt, prize, extra };
+      });
+    });
 
-    // Print the full title
-    const logStatement = `The title of this blog post is ${fullTitle}`;
+    const logStatement = `Data scraped from PlayAlberta.ca: ${lottery}`;
     console.log(logStatement);
     res.send(logStatement);
   } catch (e) {
